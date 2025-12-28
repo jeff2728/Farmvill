@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Farm Game with Sandbox Mode</title>
+  <style>
+    /* Full page background */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      background: url('farmvill.pi') no-repeat center center fixed;
+      background-size: cover;
+      position: relative;
+      min-height: 100vh;
+    }
+
+    /* Overlay a semi-transparent layer for better contrast */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(58, 95, 11, 0.7); /* dark green transparent overlay */
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      background: rgba(249, 215, 28, 0.9); /* sun yellow with transparency */
+      height: 80px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 10;
+    }
+
+    header h1 {
+      color: #333;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    #farm {
+      position: relative;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: repeat(5, 120px);
+      grid-gap: 15px;
+      justify-content: center;
+      padding: 20px;
+      min-height: 400px;
+    }
+
+    .plot {
+      width: 120px;
+      height: 120px;
+      background: url('plot_land.png') no-repeat center center;
+      background-size: cover;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+    }
+
+    .crop {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80px;
+      height: 80px;
+      pointer-events: none;
+    }
+
+    #character {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 80px;
+      height: 120px;
+      background: url('character.png') no-repeat center center;
+      background-size: contain;
+      z-index: 20;
+    }
+
+    #heldTool {
+      position: absolute;
+      bottom: 10px;
+      right: 5px;
+      width: 40px;
+      height: 40px;
+      background-image: url('Plot tools.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      pointer-events: none;
+    }
+
+    #status {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      margin-top: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+    }
+
+    #sandboxInstructions {
+      position: relative;
+      z-index: 10;
+      max-width: 600px;
+      margin: 20px auto;
+      padding: 15px;
+      background: rgba(255, 248, 220, 0.9);
+      border: 1px solid #f9d71c;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #333;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>My Simple Farm</h1>
+  </header>
+
+  <div id="farm"></div>
+
+  <div id="character" title="Farmer">
+    <div id="heldTool" title="Plant Tool"></div>
+  </div>
+
+  <div id="status">Click a plot to plant a crop.</div>
+
+  <div id="sandboxInstructions">
+    <strong>Run Development App in the Sandbox</strong><br />
+    First, set sandbox flag to <code>true</code> within your Front End app code.<br />
+    Copy URL from dev portal and paste in your desktop browser.<br />
+    Enter the provided code in the utilities page of your Pi Mining App, found in the menu bar on the top left of the screen.<br />
+    Your browser will now be in sandbox mode and connect to your Pi account.
+  </div>
+
+  <script>
+    // === Sandbox Mode Configuration ===
+    // Set sandbox flag to true to enable sandbox mode.
+    // Follow the dev portal instructions: copy URL, paste in desktop browser,
+    // enter provided code in Pi Mining App utilities page.
+    const sandbox = true;
+
+    // Show a banner to indicate sandbox mode is active
+    if (sandbox) {
+      const banner = document.createElement('div');
+      banner.textContent = '⚠️ Sandbox Mode Active';
+      banner.style.position = 'fixed';
+      banner.style.top = '0';
+      banner.style.left = '0';
+      banner.style.right = '0';
+      banner.style.backgroundColor = '#f9d71c';
+      banner.style.color = '#333';
+      banner.style.fontWeight = 'bold';
+      banner.style.textAlign = 'center';
+      banner.style.padding = '5px';
+      banner.style.zIndex = '2000';
+      document.body.appendChild(banner);
+
+      // Push down body content so banner doesn't overlap header
+      document.body.style.paddingTop = banner.offsetHeight + 'px';
+    }
+
+    const farm = document.getElementById('farm');
+    const status = document.getElementById('status');
+
+    // Crop images - replace these URLs with your own images or paths
+    const cropsData = {
+      Banana: 'banana.png',
+      Corn: 'corn.png',
+      Eggplant: 'eggplant.png'
+    };
+
+    const growTime = 15000; // 15 seconds grow time
+    const plots = [];
+    const plotCount = 10;
+
+    // Initialize farm plots
+    for (let i = 0; i < plotCount; i++) {
+      const plot = {
+        element: document.createElement('div'),
+        crop: null,
+        state: 'empty', // empty, growing, ready
+        timer: null
+      };
+      plot.element.classList.add('plot');
+      plot.element.dataset.index = i;
+      farm.appendChild(plot.element);
+      plots.push(plot);
+    }
+
+    // Prompt user to pick a crop when planting
+    async function pickCrop() {
+      const cropNames = Object.keys(cropsData);
+      let choice = prompt(`Choose a crop to plant:\n${cropNames.join(', ')}`, cropNames[0]);
+      if (!choice || !cropNames.includes(choice)) {
+        alert('Invalid crop choice.');
+        return null;
+      }
+      return choice;
+    }
+
+    // Plot click handler
+    farm.addEventListener('click', async (e) => {
+      const plotDiv = e.target.closest('.plot');
+      if (!plotDiv) return;
+      const idx = parseInt(plotDiv.dataset.index);
+      const plot = plots[idx];
+
+      if (plot.state === 'empty') {
+        const crop = await pickCrop();
+        if (!crop) return;
+        plot.crop = crop;
+        plot.state = 'growing';
+        updatePlot(plot);
+        status.textContent = `Planted ${crop} on plot ${idx + 1}. It will grow in 15 seconds!`;
+
+        plot.timer = setTimeout(() => {
+          plot.state = 'ready';
+          updatePlot(plot);
+          status.textContent = `${crop} on plot ${idx + 1} is ready to harvest! Click to harvest.`;
+        }, growTime);
+
+      } else if (plot.state === 'ready') {
+        alert(`You harvested ${plot.crop}!`);
+        plot.state = 'empty';
+        plot.crop = null;
+        clearTimeout(plot.timer);
+        plot.timer = null;
+        updatePlot(plot);
+        status.textContent = `Plot harvested! Click to plant a crop.`;
+
+      } else if (plot.state === 'growing') {
+        alert('Crop is still growing. Please wait.');
+      }
+    });
+
+    // Update plot visuals
+    function updatePlot(plot) {
+      plot.element.innerHTML = '';
+      if (plot.state === 'empty') {
+        plot.element.style.backgroundImage = "url('plot_land.png')";
+        plot.element.onclick = null;
+      } else if (plot.state === 'growing' || plot.state === 'ready') {
+        plot.element.style.backgroundImage = "url('plot_land.png')";
+        const cropImg = document.createElement('img');
+        cropImg.src = cropsData[plot.crop];
+        cropImg.className = 'crop';
+        plot.element.appendChild(cropImg);
+
+        if (plot.state === 'growing') {
+          plot.element.style.filter = 'grayscale(80%) brightness(0.7)';
+        } else {
+          plot.element.style.filter = 'brightness(1.2)';
+        }
+      }
+    }
+
+    // Initialize all plots as empty
+    plots.forEach(updatePlot);
+  </script>
+</body>
+</html>
