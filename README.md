@@ -1,2 +1,2 @@
 # Farmvill
-An old game back to life in Web3 farm crop and meet Pioneer to help your Farm
+To all programmer Please help us to bring this game to life in Web3 with social interaction farming and croping
